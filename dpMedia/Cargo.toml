@@ -1,20 +1,44 @@
 [package]
 name = "dpmedia"
-version = "0.1.0"
+version = "0.4.1"
 edition = "2021"
-rust-version = "1.76"
+rust-version = "1.80"
+description = "Tiny always-on-top 'now playing' overlay with cover art, seekable timeline and tray icon for Windows and Linux (SMTC / MPRIS)"
+authors = ["David"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dpv12/SimpleMediaWidget"
+readme = "README.md"
+keywords = ["overlay", "media", "spotify", "egui", "smtc"]
+categories = ["multimedia::audio", "gui"]
+publish = false
 
 [dependencies]
 eframe = { version = "0.29", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
+# Artwork decoding (only runs when the track changes).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+# Opens the repository link from the About window with the OS default handler.
+open = "5"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Foundation", "Media_Control"] }
+windows = { version = "0.58", features = [
+    "Foundation",
+    # IVectorView, needed to enumerate all SMTC sessions.
+    "Foundation_Collections",
+    "Media_Control",
+    "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# Notification-area icon + context menu (menu types come from its `menu` module).
+tray-icon = "0.19"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2"
+# Only used to download http(s) `mpris:artUrl` cover images.
+ureq = "2"
 
 [profile.release]
 opt-level = 3

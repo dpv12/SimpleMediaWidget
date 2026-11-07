@@ -1,0 +1,90 @@
+name: Release
+
+# Builds dpmedia.exe on Windows and attaches it to a GitHub Release so users can
+# download the .exe directly, without compiling anything.
+#
+#   git tag v0.3.0
+#   git push origin v0.3.0
+#
+# ...or run it by hand from the "Actions" tab and enter the tag to publish.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update (e.g. v0.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write # needed to create the release and upload assets
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Build and publish (Windows)
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    defaults:
+      run:
+        # The Cargo project lives in a subfolder of the repository.
+        working-directory: dpMedia
+
+    steps:
+      - name: Validate tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]') {
+            throw "Release tag '$($env:RELEASE_TAG)' must look like v1.2.3"
+          }
+
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dpMedia
+
+      # The static CRT comes from dpMedia/.cargo/config.toml, so the .exe runs
+      # on a clean Windows install.
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Stage release assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/dpmedia.exe dist/dpmedia.exe
+          Copy-Item LICENSE-MIT, LICENSE-APACHE dist/
+          $hash = (Get-FileHash dist/dpmedia.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  dpmedia.exe" | Out-File -Encoding ascii dist/dpmedia.exe.sha256
+
+      - name: Keep a workflow artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: dpmedia-windows-x64
+          path: dpMedia/dist/*
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: dpMedia ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dpMedia/dist/dpmedia.exe
+            dpMedia/dist/dpmedia.exe.sha256
+            dpMedia/dist/LICENSE-MIT
+            dpMedia/dist/LICENSE-APACHE
